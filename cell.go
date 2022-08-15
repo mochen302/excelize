@@ -505,6 +505,20 @@ func (f *File) GetCellFormula(sheet, axis string) (string, error) {
 	})
 }
 
+// GetCellFormulaMulti provides a function to get formula from cell by given
+// worksheet name and axis in XLSX file.
+func (f *File) GetCellFormulaMulti(sheet string, axis []string) ([]string, error) {
+	return f.getCellStringFuncMulti(sheet, axis, func(x *xlsxWorksheet, c *xlsxC) (string, bool, error) {
+		if c.F == nil {
+			return "", false, nil
+		}
+		if c.F.T == STCellFormulaTypeShared && c.F.Si != nil {
+			return getSharedFormula(x, *c.F.Si, c.R), true, nil
+		}
+		return c.F.Content, true, nil
+	})
+}
+
 // FormulaOpts can be passed to SetCellFormula to use other formula types.
 type FormulaOpts struct {
 	Type *string // Formula type
@@ -1147,6 +1161,69 @@ func (f *File) getCellStringFunc(sheet, axis string, fn func(x *xlsxWorksheet, c
 	return "", nil
 }
 
+// getCellStringFuncMulti does common value extraction workflow for all GetCell*
+// methods. Passed function implements specific part of required logic.
+func (f *File) getCellStringFuncMulti(sheet string, axisArr []string, fn func(x *xlsxWorksheet, c *xlsxC) (string, bool, error)) ([]string, error) {
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		return nil, err
+	}
+
+	rMap := make(map[string]struct{})
+	for i, axis := range axisArr {
+		_, _, err = CellNameToCoordinates(axis)
+		if err != nil {
+			return nil, err
+		}
+		axisArr[i] = axis
+		if _, ok := rMap[axis]; !ok {
+			rMap[axis] = struct{}{}
+		} else {
+			return nil, fmt.Errorf("axis:%v has show", axis)
+		}
+	}
+
+	ws.Lock()
+	defer ws.Unlock()
+
+	lastRowNum := 0
+	if l := len(ws.SheetData.Row); l > 0 {
+		lastRowNum = ws.SheetData.Row[l-1].R
+	}
+
+	rowMap := make(map[int]struct{})
+	for _, axis := range axisArr {
+		_, row, _ := CellNameToCoordinates(axis)
+		// keep in mind: row starts from 1
+		if row > lastRowNum {
+			return nil, fmt.Errorf("axis:%v has over lastRowNum:%v", axis, lastRowNum)
+		}
+		rowMap[row] = struct{}{}
+	}
+
+	valList := make([]string, 0, len(axisArr))
+	for rowIdx := range ws.SheetData.Row {
+		rowData := &ws.SheetData.Row[rowIdx]
+		if _, ok := rowMap[rowData.R]; !ok {
+			continue
+		}
+		for colIdx := range rowData.C {
+			colData := &rowData.C[colIdx]
+			if _, ok := rMap[colData.R]; !ok {
+				continue
+			}
+			val, ok, err := fn(ws, colData)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				valList = append(valList, val)
+			}
+		}
+	}
+	return valList, nil
+}
+
 // formattedValue provides a function to returns a value after formatted. If
 // it is possible to apply a format to the cell value, it will do so, if not
 // then an error will be returned, along with the raw value of the cell.
@@ -1315,21 +1392,34 @@ func parseSharedFormula(dCol, dRow int, orig []byte) (res string, start int) {
 // Note that this function not validate ref tag to check the cell whether in
 // allow area, and always return origin shared formula.
 func getSharedFormula(ws *xlsxWorksheet, si int, axis string) string {
-	for _, r := range ws.SheetData.Row {
-		for _, c := range r.C {
-			if c.F != nil && c.F.Ref != "" && c.F.T == STCellFormulaTypeShared && c.F.Si != nil && *c.F.Si == si {
-				col, row, _ := CellNameToCoordinates(axis)
-				sharedCol, sharedRow, _ := CellNameToCoordinates(c.R)
-				dCol := col - sharedCol
-				dRow := row - sharedRow
-				orig := []byte(c.F.Content)
-				res, start := parseSharedFormula(dCol, dRow, orig)
-				if start < len(orig) {
-					res += string(orig[start:])
+	if ws.sharedFormulaCache == nil {
+		ws.sharedFormulaCache = make(map[int]xlsxC)
+		for _, r := range ws.SheetData.Row {
+			for _, c := range r.C {
+				if c.F != nil && c.F.Ref != "" && c.F.T == STCellFormulaTypeShared {
+					ws.sharedFormulaCache[*c.F.Si] = c
 				}
-				return res
 			}
 		}
+
+	}
+
+	c, ok := ws.sharedFormulaCache[si]
+	if !ok {
+		return ""
+	}
+	
+	if c.F != nil && c.F.Ref != "" && c.F.T == STCellFormulaTypeShared && c.F.Si != nil && *c.F.Si == si {
+		col, row, _ := CellNameToCoordinates(axis)
+		sharedCol, sharedRow, _ := CellNameToCoordinates(c.R)
+		dCol := col - sharedCol
+		dRow := row - sharedRow
+		orig := []byte(c.F.Content)
+		res, start := parseSharedFormula(dCol, dRow, orig)
+		if start < len(orig) {
+			res += string(orig[start:])
+		}
+		return res
 	}
 	return ""
 }

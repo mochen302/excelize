@@ -62,6 +62,7 @@ type xlsxWorksheet struct {
 	TableParts             *xlsxTableParts              `xml:"tableParts"`
 	ExtLst                 *xlsxExtLst                  `xml:"extLst"`
 	DecodeAlternateContent *xlsxInnerXML                `xml:"http://schemas.openxmlformats.org/markup-compatibility/2006 AlternateContent"`
+	sharedFormulaCache     map[int]xlsxC                `xml:"shared_formula_cache"`
 }
 
 // xlsxDrawing change r:id to rid in the namespace.
