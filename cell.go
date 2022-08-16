@@ -507,7 +507,7 @@ func (f *File) GetCellFormula(sheet, axis string) (string, error) {
 
 // GetCellFormulaMulti provides a function to get formula from cell by given
 // worksheet name and axis in XLSX file.
-func (f *File) GetCellFormulaMulti(sheet string, axis []string) ([]string, error) {
+func (f *File) GetCellFormulaMulti(sheet string, axis []string) (map[string]string, error) {
 	return f.getCellStringFuncMulti(sheet, axis, func(x *xlsxWorksheet, c *xlsxC) (string, bool, error) {
 		if c.F == nil {
 			return "", false, nil
@@ -1163,7 +1163,7 @@ func (f *File) getCellStringFunc(sheet, axis string, fn func(x *xlsxWorksheet, c
 
 // getCellStringFuncMulti does common value extraction workflow for all GetCell*
 // methods. Passed function implements specific part of required logic.
-func (f *File) getCellStringFuncMulti(sheet string, axisArr []string, fn func(x *xlsxWorksheet, c *xlsxC) (string, bool, error)) ([]string, error) {
+func (f *File) getCellStringFuncMulti(sheet string, axisArr []string, fn func(x *xlsxWorksheet, c *xlsxC) (string, bool, error)) (map[string]string, error) {
 	ws, err := f.workSheetReader(sheet)
 	if err != nil {
 		return nil, err
@@ -1201,7 +1201,7 @@ func (f *File) getCellStringFuncMulti(sheet string, axisArr []string, fn func(x 
 		rowMap[row] = struct{}{}
 	}
 
-	valList := make([]string, 0, len(axisArr))
+	valMap := make(map[string]string)
 	for rowIdx := range ws.SheetData.Row {
 		rowData := &ws.SheetData.Row[rowIdx]
 		if _, ok := rowMap[rowData.R]; !ok {
@@ -1217,11 +1217,11 @@ func (f *File) getCellStringFuncMulti(sheet string, axisArr []string, fn func(x 
 				return nil, err
 			}
 			if ok {
-				valList = append(valList, val)
+				valMap[colData.R] = val
 			}
 		}
 	}
-	return valList, nil
+	return valMap, nil
 }
 
 // formattedValue provides a function to returns a value after formatted. If
@@ -1408,7 +1408,7 @@ func getSharedFormula(ws *xlsxWorksheet, si int, axis string) string {
 	if !ok {
 		return ""
 	}
-	
+
 	if c.F != nil && c.F.Ref != "" && c.F.T == STCellFormulaTypeShared && c.F.Si != nil && *c.F.Si == si {
 		col, row, _ := CellNameToCoordinates(axis)
 		sharedCol, sharedRow, _ := CellNameToCoordinates(c.R)
