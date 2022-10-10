@@ -68,6 +68,26 @@ func (f *File) GetRows(sheet string, opts ...Options) ([][]string, error) {
 	return results[:max], rows.Close()
 }
 
+func (f *File) GetRowsX(sheet string, opts ...Options) ([][]ColumnX, error) {
+	rows, err := f.Rows(sheet)
+	if err != nil {
+		return nil, err
+	}
+	results, cur, max := make([][]ColumnX, 0, 64), 0, 0
+	for rows.Next() {
+		cur++
+		row, err := rows.ColumnsX(opts...)
+		if err != nil {
+			break
+		}
+		results = append(results, row)
+		if len(row) > 0 {
+			max = cur
+		}
+	}
+	return results[:max], rows.Close()
+}
+
 // Rows defines an iterator to a sheet.
 type Rows struct {
 	err                     error
@@ -80,6 +100,7 @@ type Rows struct {
 	decoder                 *xml.Decoder
 	token                   xml.Token
 	curRowOpts, seekRowOpts RowOpts
+	ws                      *xlsxWorksheet
 }
 
 // Next will return true if find the next row element.
@@ -179,6 +200,53 @@ func (rows *Rows) Columns(opts ...Options) ([]string, error) {
 	return rowIterator.columns, rowIterator.err
 }
 
+// ColumnsX return the current row's column values. This fetches the worksheet
+// data as a stream, returns each cell in a row as is, and will not skip empty
+// rows in the tail of the worksheet.
+func (rows *Rows) ColumnsX(opts ...Options) ([]ColumnX, error) {
+	if rows.curRow > rows.seekRow {
+		return nil, nil
+	}
+	var rowIterator rowXMLIterator
+	var token xml.Token
+	rows.rawCellValue, rows.sst = parseOptions(opts...).RawCellValue, rows.f.sharedStringsReader()
+	for {
+		if rows.token != nil {
+			token = rows.token
+		} else if token, _ = rows.decoder.Token(); token == nil {
+			break
+		}
+		switch xmlElement := token.(type) {
+		case xml.StartElement:
+			rowIterator.inElement = xmlElement.Name.Local
+			if rowIterator.inElement == "row" {
+				rowNum := 0
+				if rowNum, rowIterator.err = attrValToInt("r", xmlElement.Attr); rowNum != 0 {
+					rows.curRow = rowNum
+				} else if rows.token == nil {
+					rows.curRow++
+				}
+				rows.token = token
+				rows.seekRowOpts = extractRowOpts(xmlElement.Attr)
+				if rows.curRow > rows.seekRow {
+					rows.token = nil
+					return rowIterator.columnsX, rowIterator.err
+				}
+			}
+			if rows.rowXMLHandler(&rowIterator, &xmlElement, rows.rawCellValue); rowIterator.err != nil {
+				rows.token = nil
+				return rowIterator.columnsX, rowIterator.err
+			}
+			rows.token = nil
+		case xml.EndElement:
+			if xmlElement.Name.Local == "sheetData" {
+				return rowIterator.columnsX, rowIterator.err
+			}
+		}
+	}
+	return rowIterator.columnsX, rowIterator.err
+}
+
 func extractRowOpts(attrs []xml.Attr) RowOpts {
 	rowOpts := RowOpts{Height: defaultRowHeight}
 	if styleID, err := attrValToInt("s", attrs); err == nil && styleID > 0 && styleID < MaxCellStyles {
@@ -201,6 +269,14 @@ func appendSpace(l int, s []string) []string {
 	return s
 }
 
+// appendSpace append blank characters to slice by given length and source slice.
+func appendColumnX(l int, s []ColumnX) []ColumnX {
+	for i := 1; i < l; i++ {
+		s = append(s, ColumnX{})
+	}
+	return s
+}
+
 // ErrSheetNotExist defines an error of sheet is not exist
 type ErrSheetNotExist struct {
 	SheetName string
@@ -216,6 +292,12 @@ type rowXMLIterator struct {
 	inElement string
 	cellCol   int
 	columns   []string
+	columnsX  []ColumnX
+}
+
+type ColumnX struct {
+	Value string
+	F     string
 }
 
 // rowXMLHandler parse the row XML element of the worksheet.
@@ -232,8 +314,23 @@ func (rows *Rows) rowXMLHandler(rowIterator *rowXMLIterator, xmlElement *xml.Sta
 		blank := rowIterator.cellCol - len(rowIterator.columns)
 		if val, _ := colCell.getValueFrom(rows.f, rows.sst, raw); val != "" || colCell.F != nil {
 			rowIterator.columns = append(appendSpace(blank, rowIterator.columns), val)
+
+			fc := calculateF(colCell, rows.ws)
+			rowIterator.columnsX = append(appendColumnX(blank, rowIterator.columnsX), ColumnX{Value: val, F: fc})
 		}
 	}
+}
+
+func calculateF(c xlsxC, x *xlsxWorksheet) string {
+	if c.F == nil {
+		return ""
+	}
+	if x != nil {
+		if c.F.T == STCellFormulaTypeShared && c.F.Si != nil {
+			return getSharedFormula(x, *c.F.Si, c.R)
+		}
+	}
+	return c.F.Content
 }
 
 // Rows returns a rows iterator, used for streaming reading data for a
@@ -262,8 +359,12 @@ func (f *File) Rows(sheet string) (*Rows, error) {
 	if !ok {
 		return nil, ErrSheetNotExist{sheet}
 	}
-	if ws, ok := f.Sheet.Load(name); ok && ws != nil {
+
+	ws, ok := f.Sheet.Load(name)
+	var wsx *xlsxWorksheet
+	if ok && ws != nil {
 		worksheet := ws.(*xlsxWorksheet)
+		wsx = worksheet
 		worksheet.Lock()
 		defer worksheet.Unlock()
 		// flush data
@@ -271,7 +372,7 @@ func (f *File) Rows(sheet string) (*Rows, error) {
 		f.saveFileList(name, f.replaceNameSpaceBytes(name, output))
 	}
 	var err error
-	rows := Rows{f: f, sheet: name}
+	rows := Rows{f: f, sheet: name, ws: wsx}
 	rows.needClose, rows.decoder, rows.tempFile, err = f.xmlDecoder(name)
 	return &rows, err
 }
