@@ -68,7 +68,7 @@ func (f *File) GetRows(sheet string, opts ...Options) ([][]string, error) {
 	return results[:max], rows.Close()
 }
 
-func (f *File) GetRowsX(sheet string, opts ...Options) ([][]ColumnX, error) {
+func (f *File) GetRowsX(sheet string, opts ...Options) ([][]*ColumnX, error) {
 	axis, err := CoordinatesToCellName(1, 1)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (f *File) GetRowsX(sheet string, opts ...Options) ([][]ColumnX, error) {
 	if err != nil {
 		return nil, err
 	}
-	results, cur, max := make([][]ColumnX, 0, 64), 0, 0
+	results, cur, max := make([][]*ColumnX, 0, 64), 0, 0
 	for rows.Next() {
 		cur++
 		row, err := rows.ColumnsX(opts...)
@@ -212,7 +212,7 @@ func (rows *Rows) Columns(opts ...Options) ([]string, error) {
 // ColumnsX return the current row's column values. This fetches the worksheet
 // data as a stream, returns each cell in a row as is, and will not skip empty
 // rows in the tail of the worksheet.
-func (rows *Rows) ColumnsX(opts ...Options) ([]ColumnX, error) {
+func (rows *Rows) ColumnsX(opts ...Options) ([]*ColumnX, error) {
 	if rows.curRow > rows.seekRow {
 		return nil, nil
 	}
@@ -279,9 +279,9 @@ func appendSpace(l int, s []string) []string {
 }
 
 // appendSpace append blank characters to slice by given length and source slice.
-func appendColumnX(l int, s []ColumnX) []ColumnX {
+func appendColumnX(l int, s []*ColumnX) []*ColumnX {
 	for i := 1; i < l; i++ {
-		s = append(s, ColumnX{})
+		s = append(s, &ColumnX{})
 	}
 	return s
 }
@@ -301,7 +301,7 @@ type rowXMLIterator struct {
 	inElement string
 	cellCol   int
 	columns   []string
-	columnsX  []ColumnX
+	columnsX  []*ColumnX
 }
 
 type ColumnX struct {
@@ -325,7 +325,7 @@ func (rows *Rows) rowXMLHandler(rowIterator *rowXMLIterator, xmlElement *xml.Sta
 			rowIterator.columns = append(appendSpace(blank, rowIterator.columns), val)
 
 			fc := calculateF(colCell, rows.ws)
-			rowIterator.columnsX = append(appendColumnX(blank, rowIterator.columnsX), ColumnX{Value: val, F: fc})
+			rowIterator.columnsX = append(appendColumnX(blank, rowIterator.columnsX), &ColumnX{Value: val, F: fc})
 		}
 	}
 }
