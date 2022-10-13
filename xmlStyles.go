@@ -37,15 +37,15 @@ type xlsxStyleSheet struct {
 // There are a variety of choices for how text is aligned both horizontally and
 // vertically, as well as indentation settings, and so on.
 type xlsxAlignment struct {
-	Horizontal      string `xml:"horizontal,attr,omitempty"`
-	Indent          int    `xml:"indent,attr,omitempty"`
-	JustifyLastLine bool   `xml:"justifyLastLine,attr,omitempty"`
-	ReadingOrder    uint64 `xml:"readingOrder,attr,omitempty"`
-	RelativeIndent  int    `xml:"relativeIndent,attr,omitempty"`
-	ShrinkToFit     bool   `xml:"shrinkToFit,attr,omitempty"`
-	TextRotation    int    `xml:"textRotation,attr,omitempty"`
-	Vertical        string `xml:"vertical,attr,omitempty"`
-	WrapText        bool   `xml:"wrapText,attr,omitempty"`
+	Horizontal      string `xml:"horizontal,attr,omitempty" json:"horizontal,omitempty"`
+	Indent          int    `xml:"indent,attr,omitempty" json:"indent,omitempty"`
+	JustifyLastLine bool   `xml:"justifyLastLine,attr,omitempty" json:"justify_last_line,omitempty"`
+	ReadingOrder    uint64 `xml:"readingOrder,attr,omitempty" json:"reading_order,omitempty"`
+	RelativeIndent  int    `xml:"relativeIndent,attr,omitempty" json:"relative_indent,omitempty"`
+	ShrinkToFit     bool   `xml:"shrinkToFit,attr,omitempty" json:"shrink_to_fit,omitempty"`
+	TextRotation    int    `xml:"textRotation,attr,omitempty" json:"text_rotation,omitempty"`
+	Vertical        string `xml:"vertical,attr,omitempty" json:"vertical,omitempty"`
+	WrapText        bool   `xml:"wrapText,attr,omitempty" json:"wrap_text,omitempty"`
 }
 
 // xlsxProtection (Protection Properties) contains protection properties
@@ -53,14 +53,14 @@ type xlsxAlignment struct {
 // set. The cell protection properties do not take effect unless the sheet has
 // been protected.
 type xlsxProtection struct {
-	Hidden *bool `xml:"hidden,attr"`
-	Locked *bool `xml:"locked,attr"`
+	Hidden *bool `xml:"hidden,attr" json:"hidden,omitempty"`
+	Locked *bool `xml:"locked,attr" json:"locked,omitempty"`
 }
 
 // xlsxLine expresses a single set of cell border.
 type xlsxLine struct {
-	Style string     `xml:"style,attr,omitempty"`
-	Color *xlsxColor `xml:"color"`
+	Style string     `xml:"style,attr,omitempty" json:"style,omitempty"`
+	Color *xlsxColor `xml:"color" json:"color,omitempty"`
 }
 
 // xlsxColor is a common mapping used for both the fgColor and bgColor elements.
@@ -70,11 +70,11 @@ type xlsxLine struct {
 // Cell fill patterns operate with two colors: a background color and a
 // foreground color. These combine together to make a patterned cell fill.
 type xlsxColor struct {
-	Auto    bool    `xml:"auto,attr,omitempty"`
-	RGB     string  `xml:"rgb,attr,omitempty"`
-	Indexed int     `xml:"indexed,attr,omitempty"`
-	Theme   *int    `xml:"theme,attr"`
-	Tint    float64 `xml:"tint,attr,omitempty"`
+	Auto    bool    `xml:"auto,attr,omitempty" json:"auto,omitempty"`
+	RGB     string  `xml:"rgb,attr,omitempty" json:"rgb,omitempty"`
+	Indexed int     `xml:"indexed,attr,omitempty" json:"indexed,omitempty"`
+	Theme   *int    `xml:"theme,attr" json:"theme,omitempty"`
+	Tint    float64 `xml:"tint,attr,omitempty" json:"tint,omitempty"`
 }
 
 // xlsxFonts directly maps the font element. This element contains all font
@@ -87,20 +87,20 @@ type xlsxFonts struct {
 // xlsxFont directly maps the font element. This element defines the
 // properties for one of the fonts used in this workbook.
 type xlsxFont struct {
-	B        *attrValBool   `xml:"b"`
-	I        *attrValBool   `xml:"i"`
-	Strike   *attrValBool   `xml:"strike"`
-	Outline  *attrValBool   `xml:"outline"`
-	Shadow   *attrValBool   `xml:"shadow"`
-	Condense *attrValBool   `xml:"condense"`
-	Extend   *attrValBool   `xml:"extend"`
-	U        *attrValString `xml:"u"`
-	Sz       *attrValFloat  `xml:"sz"`
-	Color    *xlsxColor     `xml:"color"`
-	Name     *attrValString `xml:"name"`
-	Family   *attrValInt    `xml:"family"`
-	Charset  *attrValInt    `xml:"charset"`
-	Scheme   *attrValString `xml:"scheme"`
+	B        *attrValBool   `xml:"b" json:"b,omitempty"`
+	I        *attrValBool   `xml:"i" json:"i,omitempty"`
+	Strike   *attrValBool   `xml:"strike" json:"strike,omitempty"`
+	Outline  *attrValBool   `xml:"outline" json:"outline,omitempty"`
+	Shadow   *attrValBool   `xml:"shadow" json:"shadow,omitempty"`
+	Condense *attrValBool   `xml:"condense" json:"condense,omitempty"`
+	Extend   *attrValBool   `xml:"extend" json:"extend,omitempty"`
+	U        *attrValString `xml:"u" json:"u,omitempty"`
+	Sz       *attrValFloat  `xml:"sz" json:"sz,omitempty"`
+	Color    *xlsxColor     `xml:"color" json:"color,omitempty"`
+	Name     *attrValString `xml:"name" json:"name,omitempty"`
+	Family   *attrValInt    `xml:"family" json:"family,omitempty"`
+	Charset  *attrValInt    `xml:"charset" json:"charset,omitempty"`
+	Scheme   *attrValString `xml:"scheme" json:"scheme,omitempty"`
 }
 
 // xlsxFills directly maps the fills element. This element defines the cell
@@ -115,8 +115,8 @@ type xlsxFills struct {
 // xlsxFill directly maps the fill element. This element specifies fill
 // formatting.
 type xlsxFill struct {
-	PatternFill  *xlsxPatternFill  `xml:"patternFill"`
-	GradientFill *xlsxGradientFill `xml:"gradientFill"`
+	PatternFill  *xlsxPatternFill  `xml:"patternFill" json:"pattern_fill,omitempty"`
+	GradientFill *xlsxGradientFill `xml:"gradientFill" json:"gradient_fill,omitempty"`
 }
 
 // xlsxPatternFill is used to specify cell fill information for pattern and
@@ -124,9 +124,9 @@ type xlsxFill struct {
 // For cell fills with patterns specified, then the cell fill color is
 // specified by the bgColor element.
 type xlsxPatternFill struct {
-	PatternType string     `xml:"patternType,attr,omitempty"`
-	FgColor     *xlsxColor `xml:"fgColor"`
-	BgColor     *xlsxColor `xml:"bgColor"`
+	PatternType string     `xml:"patternType,attr,omitempty" json:"pattern_type,omitempty"`
+	FgColor     *xlsxColor `xml:"fgColor" json:"fg_color,omitempty"`
+	BgColor     *xlsxColor `xml:"bgColor" json:"bg_color,omitempty"`
 }
 
 // xlsxGradientFill defines a gradient-style cell fill. Gradient cell fills can
@@ -159,14 +159,14 @@ type xlsxBorders struct {
 // border formats (left, right, top, bottom, diagonal). Color is optional. When
 // missing, 'automatic' is implied.
 type xlsxBorder struct {
-	DiagonalDown bool     `xml:"diagonalDown,attr,omitempty"`
-	DiagonalUp   bool     `xml:"diagonalUp,attr,omitempty"`
-	Outline      bool     `xml:"outline,attr,omitempty"`
-	Left         xlsxLine `xml:"left,omitempty"`
-	Right        xlsxLine `xml:"right,omitempty"`
-	Top          xlsxLine `xml:"top,omitempty"`
-	Bottom       xlsxLine `xml:"bottom,omitempty"`
-	Diagonal     xlsxLine `xml:"diagonal,omitempty"`
+	DiagonalDown bool     `xml:"diagonalDown,attr,omitempty" json:"diagonal_down,omitempty"`
+	DiagonalUp   bool     `xml:"diagonalUp,attr,omitempty" json:"diagonal_up,omitempty"`
+	Outline      bool     `xml:"outline,attr,omitempty" json:"outline,omitempty"`
+	Left         xlsxLine `xml:"left,omitempty" json:"left"`
+	Right        xlsxLine `xml:"right,omitempty" json:"right"`
+	Top          xlsxLine `xml:"top,omitempty" json:"top"`
+	Bottom       xlsxLine `xml:"bottom,omitempty" json:"bottom"`
+	Diagonal     xlsxLine `xml:"diagonal,omitempty" json:"diagonal"`
 }
 
 // xlsxCellStyles directly maps the cellStyles element. This element contains
@@ -208,21 +208,22 @@ type xlsxCellStyleXfs struct {
 // xlsxXf directly maps the xf element. A single xf element describes all of the
 // formatting for a cell.
 type xlsxXf struct {
-	NumFmtID          *int            `xml:"numFmtId,attr"`
-	FontID            *int            `xml:"fontId,attr"`
-	FillID            *int            `xml:"fillId,attr"`
-	BorderID          *int            `xml:"borderId,attr"`
-	XfID              *int            `xml:"xfId,attr"`
-	QuotePrefix       *bool           `xml:"quotePrefix,attr"`
-	PivotButton       *bool           `xml:"pivotButton,attr"`
-	ApplyNumberFormat *bool           `xml:"applyNumberFormat,attr"`
-	ApplyFont         *bool           `xml:"applyFont,attr"`
-	ApplyFill         *bool           `xml:"applyFill,attr"`
-	ApplyBorder       *bool           `xml:"applyBorder,attr"`
-	ApplyAlignment    *bool           `xml:"applyAlignment,attr"`
-	ApplyProtection   *bool           `xml:"applyProtection,attr"`
-	Alignment         *xlsxAlignment  `xml:"alignment"`
-	Protection        *xlsxProtection `xml:"protection"`
+	Lang              *string         `xml:"lang,attr" json:"lang,omitempty"`
+	NumFmtID          *int            `xml:"numFmtId,attr" json:"num_fmt_id,omitempty"`
+	FontID            *int            `xml:"fontId,attr" json:"font_id,omitempty"`
+	FillID            *int            `xml:"fillId,attr" json:"fill_id,omitempty"`
+	BorderID          *int            `xml:"borderId,attr" json:"border_id,omitempty"`
+	XfID              *int            `xml:"xfId,attr" json:"xf_id,omitempty"`
+	QuotePrefix       *bool           `xml:"quotePrefix,attr" json:"quote_prefix,omitempty"`
+	PivotButton       *bool           `xml:"pivotButton,attr" json:"pivot_button,omitempty"`
+	ApplyNumberFormat *bool           `xml:"applyNumberFormat,attr" json:"apply_number_format,omitempty"`
+	ApplyFont         *bool           `xml:"applyFont,attr" json:"apply_font,omitempty"`
+	ApplyFill         *bool           `xml:"applyFill,attr" json:"apply_fill,omitempty"`
+	ApplyBorder       *bool           `xml:"applyBorder,attr" json:"apply_border,omitempty"`
+	ApplyAlignment    *bool           `xml:"applyAlignment,attr" json:"apply_alignment,omitempty"`
+	ApplyProtection   *bool           `xml:"applyProtection,attr" json:"apply_protection,omitempty"`
+	Alignment         *xlsxAlignment  `xml:"alignment" json:"alignment,omitempty"`
+	Protection        *xlsxProtection `xml:"protection" json:"protection,omitempty"`
 }
 
 // xlsxCellXfs directly maps the cellXfs element. This element contains the
@@ -300,8 +301,8 @@ type xlsxNumFmts struct {
 // format properties which indicate how to format and render the numeric value
 // of a cell.
 type xlsxNumFmt struct {
-	NumFmtID   int    `xml:"numFmtId,attr"`
-	FormatCode string `xml:"formatCode,attr,omitempty"`
+	NumFmtID   int    `xml:"numFmtId,attr" json:"num_fmt_id,omitempty"`
+	FormatCode string `xml:"formatCode,attr,omitempty" json:"format_code,omitempty"`
 }
 
 // xlsxStyleColors directly maps the colors element. Color information
@@ -370,4 +371,14 @@ type Style struct {
 	CustomNumFmt  *string     `json:"custom_number_format"`
 	Lang          string      `json:"lang"`
 	NegRed        bool        `json:"negred"`
+}
+
+type StyleOutput struct {
+	Lang       string          `json:"lang,omitempty"`
+	NumFmt     *xlsxNumFmt     `json:"num_fmt,omitempty"`
+	Font       *xlsxFont       `json:"fonts,omitempty"`
+	Border     *xlsxBorder     `json:"borders,omitempty"`
+	Fill       *xlsxFill       `json:"fills,omitempty"`
+	Alignment  *xlsxAlignment  `json:"alignment,omitempty"`
+	Protection *xlsxProtection `json:"protection,omitempty"`
 }

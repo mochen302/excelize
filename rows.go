@@ -69,6 +69,15 @@ func (f *File) GetRows(sheet string, opts ...Options) ([][]string, error) {
 }
 
 func (f *File) GetRowsX(sheet string, opts ...Options) ([][]ColumnX, error) {
+	axis, err := CoordinatesToCellName(1, 1)
+	if err != nil {
+		return nil, err
+	}
+	_, err = f.GetCellStyle(sheet, axis)
+	if err != nil {
+		return nil, err
+	}
+
 	rows, err := f.Rows(sheet)
 	if err != nil {
 		return nil, err

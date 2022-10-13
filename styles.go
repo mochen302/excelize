@@ -980,6 +980,17 @@ func parseFormatStyleSet(style interface{}) (*Style, error) {
 	return &fs, err
 }
 
+// parseFormatStyleJson provides a function to parse the format settings of the
+// cells and conditional formats.
+func parseFormatStyleFromJson(style string) (*StyleOutput, error) {
+	fs := &StyleOutput{}
+	err := json.Unmarshal([]byte(style), fs)
+	if err != nil {
+		return nil, err
+	}
+	return fs, nil
+}
+
 // NewStyle provides a function to create the style for cells by given JSON or
 // structure pointer. Note that the color field uses RGB color code.
 //
@@ -1894,7 +1905,58 @@ func (f *File) NewStyle(style interface{}) (int, error) {
 
 	applyAlignment, alignment := fs.Alignment != nil, newAlignment(fs)
 	applyProtection, protection := fs.Protection != nil, newProtection(fs)
-	cellXfsID = setCellXfs(s, fontID, numFmtID, fillID, borderID, applyAlignment, applyProtection, alignment, protection)
+	cellXfsID = setCellXfs(s, fontID, numFmtID, fillID, borderID, applyAlignment, applyProtection, alignment, protection, fs.Lang)
+	return cellXfsID, nil
+}
+
+func (f *File) NewStyleWithJson(style string) (int, error) {
+	var fs *StyleOutput
+	var err error
+	var cellXfsID, fontID, borderID, fillID int
+	fs, err = parseFormatStyleFromJson(style)
+	if err != nil {
+		return cellXfsID, err
+	}
+
+	s := f.stylesReader()
+	s.Lock()
+	defer s.Unlock()
+
+	numFmtID := newNumFmtImmediate(s, fs.Lang, fs.NumFmt)
+
+	if fs.Font != nil {
+		fontID = f.getFontIDImmediate(s, fs.Font)
+		if fontID == -1 {
+			s.Fonts.Count++
+			s.Fonts.Font = append(s.Fonts.Font, fs.Font)
+			fontID = s.Fonts.Count - 1
+		}
+	}
+
+	borderID = getBorderIDImmediate(s, fs.Border)
+	if borderID == -1 {
+		if fs.Border == nil {
+			borderID = 0
+		} else {
+			s.Borders.Count++
+			s.Borders.Border = append(s.Borders.Border, fs.Border)
+			borderID = s.Borders.Count - 1
+		}
+	}
+
+	if fillID = getFillIDImmediate(s, fs.Fill); fillID == -1 {
+		if fs.Fill != nil {
+			s.Fills.Count++
+			s.Fills.Fill = append(s.Fills.Fill, fs.Fill)
+			fillID = s.Fills.Count - 1
+		} else {
+			fillID = 0
+		}
+	}
+
+	applyAlignment, alignment := fs.Alignment != nil, fs.Alignment
+	applyProtection, protection := fs.Protection != nil, fs.Protection
+	cellXfsID = setCellXfs(s, fontID, numFmtID, fillID, borderID, applyAlignment, applyProtection, alignment, protection, fs.Lang)
 	return cellXfsID, nil
 }
 
@@ -2024,12 +2086,18 @@ func (f *File) readDefaultFont() *xlsxFont {
 // getFontID provides a function to get font ID.
 // If given font is not exist, will return -1.
 func (f *File) getFontID(styleSheet *xlsxStyleSheet, style *Style) (fontID int) {
+	return f.getFontIDImmediate(styleSheet, f.newFont(style))
+}
+
+// getFontIDImmediate provides a function to get font ID.
+// If given font is not exist, will return -1.
+func (f *File) getFontIDImmediate(styleSheet *xlsxStyleSheet, font *xlsxFont) (fontID int) {
 	fontID = -1
-	if styleSheet.Fonts == nil || style.Font == nil {
+	if styleSheet.Fonts == nil || font == nil {
 		return
 	}
 	for idx, fnt := range styleSheet.Fonts.Font {
-		if reflect.DeepEqual(*fnt, *f.newFont(style)) {
+		if reflect.DeepEqual(*fnt, font) {
 			fontID = idx
 			return
 		}
@@ -2150,18 +2218,62 @@ func newNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
 	return style.NumFmt
 }
 
+// newNumFmt provides a function to check if number format code in the range
+// of built-in values.
+func newNumFmtImmediate(styleSheet *xlsxStyleSheet, lang string, fmt *xlsxNumFmt) int {
+	if fmt.FormatCode != "" {
+		if customNumFmtID := getCustomNumFmtIDImmediate(styleSheet, fmt.FormatCode); customNumFmtID != -1 {
+			return customNumFmtID
+		}
+		return setCustomNumFmtImmediate(styleSheet, fmt)
+	}
+	_, ok := builtInNumFmt[fmt.NumFmtID]
+	if !ok {
+		fc, currency := currencyNumFmt[fmt.NumFmtID]
+		if !currency {
+			return setLangNumFmtImmediate(styleSheet, lang, fmt.NumFmtID)
+		}
+		var numFmtID int
+		if styleSheet.NumFmts != nil {
+			numFmtID = styleSheet.NumFmts.NumFmt[len(styleSheet.NumFmts.NumFmt)-1].NumFmtID + 1
+			nf := xlsxNumFmt{
+				FormatCode: fc,
+				NumFmtID:   numFmtID,
+			}
+			styleSheet.NumFmts.NumFmt = append(styleSheet.NumFmts.NumFmt, &nf)
+			styleSheet.NumFmts.Count++
+		} else {
+			nf := xlsxNumFmt{
+				FormatCode: fc,
+				NumFmtID:   numFmtID,
+			}
+			numFmts := xlsxNumFmts{
+				NumFmt: []*xlsxNumFmt{&nf},
+				Count:  1,
+			}
+			styleSheet.NumFmts = &numFmts
+		}
+		return numFmtID
+	}
+	return fmt.NumFmtID
+}
+
 // setCustomNumFmt provides a function to set custom number format code.
 func setCustomNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
 	nf := xlsxNumFmt{FormatCode: *style.CustomNumFmt}
+	return setCustomNumFmtImmediate(styleSheet, &nf)
+}
 
+// setCustomNumFmtImmediate provides a function to set custom number format code.
+func setCustomNumFmtImmediate(styleSheet *xlsxStyleSheet, nf *xlsxNumFmt) int {
 	if styleSheet.NumFmts != nil {
 		nf.NumFmtID = styleSheet.NumFmts.NumFmt[len(styleSheet.NumFmts.NumFmt)-1].NumFmtID + 1
-		styleSheet.NumFmts.NumFmt = append(styleSheet.NumFmts.NumFmt, &nf)
+		styleSheet.NumFmts.NumFmt = append(styleSheet.NumFmts.NumFmt, nf)
 		styleSheet.NumFmts.Count++
 	} else {
 		nf.NumFmtID = 164
 		numFmts := xlsxNumFmts{
-			NumFmt: []*xlsxNumFmt{&nf},
+			NumFmt: []*xlsxNumFmt{nf},
 			Count:  1,
 		}
 		styleSheet.NumFmts = &numFmts
@@ -2172,12 +2284,18 @@ func setCustomNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
 // getCustomNumFmtID provides a function to get custom number format code ID.
 // If given custom number format code is not exist, will return -1.
 func getCustomNumFmtID(styleSheet *xlsxStyleSheet, style *Style) (customNumFmtID int) {
+	return getCustomNumFmtIDImmediate(styleSheet, *style.CustomNumFmt)
+}
+
+// getCustomNumFmtIDImmediate provides a function to get custom number format code ID.
+// If given custom number format code is not exist, will return -1.
+func getCustomNumFmtIDImmediate(styleSheet *xlsxStyleSheet, formatCode string) (customNumFmtID int) {
 	customNumFmtID = -1
 	if styleSheet.NumFmts == nil {
 		return
 	}
 	for _, numFmt := range styleSheet.NumFmts.NumFmt {
-		if style.CustomNumFmt != nil && numFmt.FormatCode == *style.CustomNumFmt {
+		if formatCode != "" && numFmt.FormatCode == formatCode {
 			customNumFmtID = numFmt.NumFmtID
 			return
 		}
@@ -2187,12 +2305,17 @@ func getCustomNumFmtID(styleSheet *xlsxStyleSheet, style *Style) (customNumFmtID
 
 // setLangNumFmt provides a function to set number format code with language.
 func setLangNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
-	numFmts, ok := langNumFmt[style.Lang]
+	return setLangNumFmtImmediate(styleSheet, style.Lang, style.NumFmt)
+}
+
+// setLangNumFmtImmediate provides a function to set number format code with language.
+func setLangNumFmtImmediate(styleSheet *xlsxStyleSheet, lang string, numFmt int) int {
+	numFmts, ok := langNumFmt[lang]
 	if !ok {
 		return 0
 	}
 	var fc string
-	fc, ok = numFmts[style.NumFmt]
+	fc, ok = numFmts[numFmt]
 	if !ok {
 		return 0
 	}
@@ -2202,7 +2325,7 @@ func setLangNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
 		styleSheet.NumFmts.NumFmt = append(styleSheet.NumFmts.NumFmt, &nf)
 		styleSheet.NumFmts.Count++
 	} else {
-		nf.NumFmtID = style.NumFmt
+		nf.NumFmtID = numFmt
 		numFmts := xlsxNumFmts{
 			NumFmt: []*xlsxNumFmt{&nf},
 			Count:  1,
@@ -2221,6 +2344,16 @@ func getFillID(styleSheet *xlsxStyleSheet, style *Style) (fillID int) {
 	}
 	fills := newFills(style, true)
 	if fills == nil {
+		return
+	}
+	return getFillIDImmediate(styleSheet, fills)
+}
+
+// getFillID provides a function to get fill ID. If given fill is not
+// exist, will return -1.
+func getFillIDImmediate(styleSheet *xlsxStyleSheet, fills *xlsxFill) (fillID int) {
+	fillID = -1
+	if styleSheet.Fills == nil || fills == nil {
 		return
 	}
 	for idx, fill := range styleSheet.Fills.Fill {
@@ -2353,12 +2486,18 @@ func newProtection(style *Style) *xlsxProtection {
 // getBorderID provides a function to get border ID. If given border is not
 // exist, will return -1.
 func getBorderID(styleSheet *xlsxStyleSheet, style *Style) (borderID int) {
+	return getBorderIDImmediate(styleSheet, newBorders(style))
+}
+
+// getBorderIDImmediate provides a function to get border ID. If given border is not
+// exist, will return -1.
+func getBorderIDImmediate(styleSheet *xlsxStyleSheet, newBorder *xlsxBorder) (borderID int) {
 	borderID = -1
-	if styleSheet.Borders == nil || len(style.Border) == 0 {
+	if styleSheet.Borders == nil || newBorder == nil {
 		return
 	}
 	for idx, border := range styleSheet.Borders.Border {
-		if reflect.DeepEqual(*border, *newBorders(style)) {
+		if reflect.DeepEqual(*border, newBorder) {
 			borderID = idx
 			return
 		}
@@ -2420,8 +2559,9 @@ func newBorders(style *Style) *xlsxBorder {
 
 // setCellXfs provides a function to set describes all of the formatting for a
 // cell.
-func setCellXfs(style *xlsxStyleSheet, fontID, numFmtID, fillID, borderID int, applyAlignment, applyProtection bool, alignment *xlsxAlignment, protection *xlsxProtection) int {
+func setCellXfs(style *xlsxStyleSheet, fontID, numFmtID, fillID, borderID int, applyAlignment, applyProtection bool, alignment *xlsxAlignment, protection *xlsxProtection, lang string) int {
 	var xf xlsxXf
+	xf.Lang = stringPtr(lang)
 	xf.FontID = intPtr(fontID)
 	if fontID != 0 {
 		xf.ApplyFont = boolPtr(true)
@@ -2465,6 +2605,47 @@ func (f *File) GetCellStyle(sheet, axis string) (int, error) {
 		return 0, err
 	}
 	return f.prepareCellStyle(ws, col, row, cellData.S), err
+}
+
+// GetCellStyleJson provides a function to get cell style index by given worksheet
+// name and cell coordinates.
+func (f *File) GetCellStyleJson(sheet, axis string) (string, error) {
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		return "", err
+	}
+
+	cellData, col, row, err := f.prepareCell(ws, axis)
+	if err != nil {
+		return "", err
+	}
+
+	styleId := f.prepareCellStyle(ws, col, row, cellData.S)
+	if styleId <= 0 {
+		return "", nil
+	}
+
+	s := f.stylesReader()
+	s.Lock()
+	defer s.Unlock()
+
+	cellXfs := s.CellXfs
+	xf := cellXfs.Xf[styleId]
+	so := &StyleOutput{
+		Lang:       *xf.Lang,
+		NumFmt:     s.NumFmts.NumFmt[*xf.NumFmtID],
+		Font:       s.Fonts.Font[*xf.FontID],
+		Border:     s.Borders.Border[*xf.BorderID],
+		Fill:       s.Fills.Fill[*xf.FillID],
+		Alignment:  xf.Alignment,
+		Protection: xf.Protection,
+	}
+	marshal, err := json.Marshal(so)
+	if err != nil {
+		return "", err
+	}
+
+	return string(marshal), nil
 }
 
 // SetCellStyle provides a function to add style attribute for cells by given
