@@ -2221,6 +2221,9 @@ func newNumFmt(styleSheet *xlsxStyleSheet, style *Style) int {
 // newNumFmt provides a function to check if number format code in the range
 // of built-in values.
 func newNumFmtImmediate(styleSheet *xlsxStyleSheet, lang string, fmt *xlsxNumFmt) int {
+	if fmt == nil {
+		return 0
+	}
 	if fmt.FormatCode != "" {
 		if customNumFmtID := getCustomNumFmtIDImmediate(styleSheet, fmt.FormatCode); customNumFmtID != -1 {
 			return customNumFmtID
@@ -2631,15 +2634,34 @@ func (f *File) GetCellStyleJson(sheet, axis string) (string, error) {
 
 	cellXfs := s.CellXfs
 	xf := cellXfs.Xf[styleId]
-	so := &StyleOutput{
-		Lang:       *xf.Lang,
-		NumFmt:     s.NumFmts.NumFmt[*xf.NumFmtID],
-		Font:       s.Fonts.Font[*xf.FontID],
-		Border:     s.Borders.Border[*xf.BorderID],
-		Fill:       s.Fills.Fill[*xf.FillID],
-		Alignment:  xf.Alignment,
-		Protection: xf.Protection,
+
+	fi := func(index *int) int {
+		if index == nil {
+			return -1
+		}
+		return *index
 	}
+
+	lang := ""
+	if xf.Lang != nil {
+		lang = *xf.Lang
+	}
+	so := &StyleOutput{
+		Lang: lang,
+	}
+	if fi(xf.NumFmtID) > 0 {
+		so.NumFmt = s.NumFmts.NumFmt[fi(xf.NumFmtID)]
+	}
+	if fi(xf.FontID) > 0 {
+		so.Font = s.Fonts.Font[fi(xf.FontID)]
+	}
+	if fi(xf.BorderID) > 0 {
+		so.Border = s.Borders.Border[fi(xf.BorderID)]
+	}
+	if fi(xf.FillID) > 0 {
+		so.Fill = s.Fills.Fill[fi(xf.FillID)]
+	}
+
 	marshal, err := json.Marshal(so)
 	if err != nil {
 		return "", err
